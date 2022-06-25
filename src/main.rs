@@ -17,8 +17,9 @@ fn usage(executable: &str) {
 			"Usage: {} [OPTION]... FILE\n",
 			"Convert an image to a braille ascii art.\n\n",
 			"OPTIONS:\n",
-			" -h, --help       show this help message\n",
-			" -i               invert the colors\n"
+			" -h, --help         show this help message\n",
+			" -i                 invert the colors\n",
+			" -w, --width=WIDTH  change the size of the image\n"
 		),
 		executable
 	);
@@ -27,10 +28,11 @@ fn usage(executable: &str) {
 fn main() {
 	let mut image_name = None;
 	let mut inverted = false;
+	let mut width = None;
 
 	let mut args = env::args();
 	let executable = args.next().unwrap();
-	for arg in args {
+	while let Some(arg) = args.next() {
 		match arg.as_str() {
 			"--help" | "-h" => {
 				usage(&executable);
@@ -38,6 +40,11 @@ fn main() {
 			},
 			"-i" => {
 				inverted = true;
+			},
+			"-w" | "--width" => {
+				if let Some(param) = args.next() {
+					width = Some(param.parse::<u32>().unwrap());
+				}
 			},
 			_ => {
 				image_name = Some(arg);
@@ -50,9 +57,17 @@ fn main() {
 		process::exit(1);
 	}
 
-	let image = image::load_from_memory(
+	let mut image = image::load_from_memory(
 		&fs::read(image_name.unwrap()).unwrap()
 	).unwrap().into_luma8();
+
+	if let Some(width) = width {
+		image = image::imageops::resize(
+			&image,
+			width, width * image.height() / image.width(),
+			image::imageops::FilterType::Triangle
+		);
+	}
 
 	let image_pixels = image.as_raw();
 	let image_width = image.width() as usize;
