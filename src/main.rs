@@ -8,7 +8,6 @@
 // See: https://www.unicode.org/charts/PDF/U2800.pdf
 
 use std::{env, process, fs};
-use image;
 
 const BRAILLE: u32 = 0x2800;
 
@@ -18,7 +17,8 @@ fn usage(executable: &str) {
 			"Usage: {} [OPTION]... FILE\n",
 			"Convert an image to a braille ascii art.\n\n",
 			"OPTIONS:\n",
-			" -h, --help       show this help message\n"
+			" -h, --help       show this help message\n",
+			" -i               invert the colors\n"
 		),
 		executable
 	);
@@ -26,6 +26,7 @@ fn usage(executable: &str) {
 
 fn main() {
 	let mut image_name = None;
+	let mut inverted = false;
 
 	let mut args = env::args();
 	let executable = args.next().unwrap();
@@ -34,6 +35,9 @@ fn main() {
 			"--help" | "-h" => {
 				usage(&executable);
 				process::exit(0);
+			},
+			"-i" => {
+				inverted = true;
 			},
 			_ => {
 				image_name = Some(arg);
@@ -50,12 +54,43 @@ fn main() {
 		&fs::read(image_name.unwrap()).unwrap()
 	).unwrap().into_luma8();
 
-	let image_stretched = image::imageops::resize(
-		&image,
-		image.width(), image.height() / 2,
-		image::imageops::FilterType::Triangle
-	);
+	let image_pixels = image.as_raw();
+	let image_width = image.width() as usize;
+	let image_height = image.height() as usize;
+	for y in (0..image_height).step_by(4) {
+		for x in (0..image_width).step_by(2) {
+			let mut top_pixels = Vec::new();
+			let mut bottom_pixels = Vec::new();
 
-	//let character = char::from_u32(BRAILLE + 0b10010011).unwrap();
-	//println!("{:?}", character);
+			for x_offset in 0..=1 {
+				for y_offset in 0..=3 {
+					let mut pixel = None;
+					if x + x_offset < image_width && y + y_offset < image_height {
+						pixel = Some(
+							image_pixels[image_width * (y + y_offset) + (x + x_offset)]
+						);
+					}
+
+					if y_offset < 3 {
+						top_pixels.push(pixel);
+					} else {
+						bottom_pixels.push(pixel);
+					}
+				}
+			}
+
+			top_pixels.append(&mut bottom_pixels);
+
+			let mut byte = 0u8;
+			for i in 0..top_pixels.len() {
+				if let Some(pixel) = top_pixels[i] {
+					let bit = ((!inverted && pixel < 128) || (inverted && pixel >= 128)) as u8;
+					byte |= bit << i;
+				}
+			}
+
+			print!("{}", char::from_u32(BRAILLE + byte as u32).unwrap());
+		}
+		print!("\n");
+	}
 }
